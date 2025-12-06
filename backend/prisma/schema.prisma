@@ -1,0 +1,175 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  reader
+  librarian
+  admin
+}
+
+enum UserStatus {
+  active
+  inactive
+}
+
+enum BookStatus {
+  available
+  damaged
+  lost
+}
+
+enum BorrowStatus {
+  pending
+  approved
+  rejected
+  borrowed
+  returned
+}
+
+enum ReturnRequestStatus {
+  pending
+  confirmed
+}
+
+enum PenaltyReason {
+  late_return
+  damaged
+  lost
+}
+
+enum PenaltyStatus {
+  unpaid
+  pending
+  paid
+  rejected
+}
+
+model User {
+  id          String      @id @default(uuid())
+  authUserId  String      @unique @map("auth_user_id")
+  name        String      @db.VarChar(50)
+  phone       String?     @db.VarChar(20)
+  address     String?     @db.VarChar(255)
+  role        UserRole    @default(reader)
+  status      UserStatus  @default(active)
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  borrows     Borrow[]
+  penalties   Penalty[]
+
+  @@map("users")
+}
+
+model Category {
+  id        String   @id @default(uuid())
+  name      String   @unique @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  books     Book[]
+
+  @@map("categories")
+}
+
+model Book {
+  id               String      @id @default(uuid())
+  categoryId       String      @map("category_id")
+  title            String      @db.VarChar(100)
+  author           String      @db.VarChar(100)
+  isbn             String?     @db.VarChar(17)
+  publicationYear  Int?
+  description      String      @db.Text
+  totalQuantity    Int         @default(0) @map("total_quantity")
+  availableQuantity Int        @default(0) @map("available_quantity")
+  borrowedQuantity Int         @default(0) @map("borrowed_quantity")
+  status           BookStatus  @default(available)
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+
+  category         Category    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  borrows          Borrow[]
+
+  @@map("books")
+}
+
+model Borrow {
+  id             String         @id @default(uuid())
+  userId         String         @map("user_id")
+  bookId         String         @map("book_id")
+  status         BorrowStatus   @default(pending)
+  borrowDate     DateTime?      @map("borrow_date")
+  dueDate        DateTime?      @map("due_date")
+  returnDate     DateTime?      @map("return_date")
+  durationDays   Int            @default(14) @map("duration_days")
+  rejectionReason String?       @db.Text @map("rejection_reason")
+  extensionCount Int            @default(0) @map("extension_count")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book           Book           @relation(fields: [bookId], references: [id], onDelete: Restrict)
+  returnRequest  ReturnRequest?
+  penalties      Penalty[]
+
+  @@map("borrows")
+}
+
+model ReturnRequest {
+  id           String              @id @default(uuid())
+  borrowId     String              @unique @map("borrow_id")
+  status       ReturnRequestStatus @default(pending)
+  requestDate  DateTime            @default(now()) @map("request_date")
+  confirmedDate DateTime?          @map("confirmed_date")
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
+
+  borrow       Borrow              @relation(fields: [borrowId], references: [id], onDelete: Cascade)
+
+  @@map("return_requests")
+}
+
+model PenaltyLevel {
+  id           String   @id @default(uuid())
+  name         String   @unique @db.VarChar(25)
+  amount       Decimal  @db.Decimal(10, 2)
+  effectiveDate DateTime @default(now()) @map("effective_date")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  penalties    Penalty[]
+
+  @@map("penalty_levels")
+}
+
+model Penalty {
+  id             String        @id @default(uuid())
+  userId         String        @map("user_id")
+  borrowId       String?       @map("borrow_id")
+  penaltyLevelId String        @map("penalty_level_id")
+  reason         PenaltyReason
+  amount         Decimal       @db.Decimal(10, 2)
+  status         PenaltyStatus @default(unpaid)
+  notes          String?       @db.Text
+  rejectionReason String?       @db.Text @map("rejection_reason")
+  paymentDate    DateTime?     @map("payment_date")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  borrow         Borrow?       @relation(fields: [borrowId], references: [id], onDelete: SetNull)
+  penaltyLevel   PenaltyLevel  @relation(fields: [penaltyLevelId], references: [id], onDelete: Restrict)
+
+  @@map("penalties")
+}
+
